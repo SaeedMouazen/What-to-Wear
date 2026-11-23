@@ -1,0 +1,18 @@
+شلبس؟ What to Wear - Wardrobe Report
+Created: 2026-11-23 09:09
+Number of items: 14
+---------------------------------------------
+  1. Summer thobe              24°C to 50°C
+  2. Winter thobe              -10°C to 23°C
+  3. Jacket                    -10°C to 17°C
+  6. jeans                     16°C to 50°C
+  7. T-shirt                   20°C to 50°C
+  8. Sweater                   11°C to 21°C
+  9. Farwa                     -10°C to 12°C
+ 10. Hoodie                    0°C to 18°C
+ 11. Wool pants                -10°C to 16°C
+ 12. Summer suit               24°C to 50°C
+ 13. Winter suit               -10°C to 23°C
+ 14. Formal shirt              24°C to 50°C
+ 15. cap                       10°C to 50°C
+ 16. ice cap                   -10°C to 10°C
