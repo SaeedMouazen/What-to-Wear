@@ -1,4 +1,9 @@
+import json
+import socket
 import sqlite3
+from urllib.error import URLError
+from urllib.parse import urlencode
+from urllib.request import urlopen
 
 from flask import Flask, jsonify, request
 
@@ -10,6 +15,18 @@ db = Database()
 # Temperature limits used by the input checks (in °C).
 LOWEST_TEMP = -10
 HIGHEST_TEMP = 55
+
+# Free weather forecast service (no account or key needed): https://open-meteo.com
+WEATHER_URL = "https://api.open-meteo.com/v1/forecast"
+
+# City name -> (latitude, longitude)
+CITIES = {
+    "Riyadh": (24.69, 46.72),
+    "Jeddah": (21.49, 39.19),
+    "Madinah": (24.47, 39.61),
+    "Abha": (18.22, 42.51),
+    "Dammam": (26.43, 50.10),
+}
 
 
 # ---------- helper functions ----------
@@ -42,14 +59,20 @@ def read_clothing_form():
     return name, min_temp, max_temp
 
 
-def feels_like(temp, hour, hours_out):
-    """Night and long time outside make it feel colder."""
-    result = temp
-    if hour >= 18 or hour < 6:
-        result = result - 3
-    if hours_out >= 3:
-        result = result - 2
-    return result
+def forecast_feels_like(city, hour):
+    """Ask the weather service for today's "feels like" temperature in this city at this hour."""
+    latitude, longitude = CITIES[city]
+    query = urlencode({
+        "latitude": latitude,
+        "longitude": longitude,
+        "hourly": "apparent_temperature",
+        "timezone": "Asia/Riyadh",
+        "forecast_days": 1,
+    })
+    with urlopen(WEATHER_URL + "?" + query, timeout=3) as reply:
+        data = json.loads(reply.read().decode("utf-8"))
+    # The list has 24 values: one for each hour of today, starting at 00:00.
+    return round(data["hourly"]["apparent_temperature"][hour])
 
 
 # ---------- routes ----------
@@ -89,14 +112,37 @@ def delete_clothing(item_id):
 
 @app.route("/suggest")
 def suggest():
+    city = request.args.get("city", "")
+    typed_temp = request.args.get("temp", "").strip()
+
+    # 1. Check the input.
     try:
-        temp = check_number(request.args.get("temp", ""), "Temperature", LOWEST_TEMP, HIGHEST_TEMP)
         hour = check_number(request.args.get("hour", ""), "Hour", 0, 23)
-        hours_out = check_number(request.args.get("hours", ""), "Hours outside", 1, 24)
+        if typed_temp == "" and city not in CITIES:
+            raise ValueError("Choose a city from the list.")
+        if typed_temp != "":
+            felt = check_number(typed_temp, "Temperature", LOWEST_TEMP, HIGHEST_TEMP)
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
-    felt = feels_like(temp, hour, hours_out)
-    return jsonify({"feels_like": felt, "clothes": db.get_for_temperature(felt)})
+
+    # 2. No typed temperature: get it from the weather forecast.
+    source = "typed"
+    if typed_temp == "":
+        source = "forecast"
+        try:
+            felt = forecast_feels_like(city, hour)
+        except (URLError, socket.timeout, ValueError, KeyError, IndexError):
+            return jsonify({"error": "Couldn't get the weather forecast. Check your internet, "
+                                     "or type the temperature yourself."}), 503
+
+    # 3. Find the clothes that suit this temperature.
+    return jsonify({
+        "source": source,
+        "city": city,
+        "hour": hour,
+        "feels_like": felt,
+        "clothes": db.get_for_temperature(felt),
+    })
 
 
 @app.errorhandler(sqlite3.Error)
